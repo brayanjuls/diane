@@ -1,0 +1,12 @@
+target/
+.idea
+.bsp/
+*.iml
+*.swp
+
+.DS_Store
+
+/tmp
+/metastore_db/
+derby.log
+
