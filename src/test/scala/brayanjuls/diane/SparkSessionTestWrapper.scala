@@ -7,7 +7,8 @@ trait SparkSessionTestWrapper {
 
   lazy val spark: SparkSession = {
     Logger.getLogger("org").setLevel(Level.OFF)
-    SparkSession.builder()
+    SparkSession
+      .builder()
       .master("local")
       .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
       .config("spark.sql.warehouse.dir", (os.pwd / "tmp").toString())
