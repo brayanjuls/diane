@@ -4,9 +4,9 @@ This library provides helpful Hive helper functions for apache spark users.
 
 ![images](image/diane.png)
 
-# Setup
+## Setup
 
-# Function Documentation
+## Function Documentation
 
 ### Create View
 This function `createOrReplaceHiveView` creates a hive view from a delta table. The View will contain all the columns
@@ -45,3 +45,24 @@ after that you would be able to query, i.e:
 ```scala
 SparkSession.active.sql("select * from students").show
 ```
+
+## How to contribute
+We welcome contributions to this project, to contribute checkout our [CONTRIBUTING.md](CONTRIBUTING.md) file.
+
+## How to build the project
+
+### pre-requisites
+* SBT 1.8.2
+* Java 8
+* Scala 2.12.12
+
+### Building
+
+To compile, run
+`sbt compile`
+
+To test, run
+`sbt test`
+
+To generate artifacts, run
+`sbt package`
