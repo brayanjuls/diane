@@ -20,29 +20,36 @@ object HiveHelpers {
       val table = SparkSession.active.catalog.getTable(tableName)
 
       table.tableType.toUpperCase() match {
-        case HiveTableType.MANAGED.label => HiveTableType.MANAGED
+        case HiveTableType.MANAGED.label  => HiveTableType.MANAGED
         case HiveTableType.EXTERNAL.label => HiveTableType.EXTERNAL
       }
     } catch {
       case e: AnalysisException
-        if e.getMessage().toLowerCase().contains(s"table or view '$tableName' not found") => HiveTableType.NONREGISTERED
+          if e.getMessage().toLowerCase().contains(s"table or view '$tableName' not found") =>
+        HiveTableType.NONREGISTERED
     }
   }
 
-  def registerTable(tableName:String, tablePath:String, provider:HiveProvider = HiveProvider.DELTA):Unit = {
-    if(tablePath.isEmpty || tableName.isEmpty){
+  def registerTable(
+      tableName: String,
+      tablePath: String,
+      provider: HiveProvider = HiveProvider.DELTA
+  ): Unit = {
+    if (tablePath.isEmpty || tableName.isEmpty) {
       throw DianeValidationError("tableName and tablePath input parameters must not be empty")
     }
-    try{
-      if(provider == HiveProvider.DELTA){
+    try {
+      if (provider == HiveProvider.DELTA) {
         SparkSession.active.sql(s"CREATE TABLE $tableName using delta location '$tablePath'")
-      }else{
-        SparkSession.active.catalog.createTable(tableName,tablePath)
+      } else {
+        SparkSession.active.catalog.createTable(tableName, tablePath)
       }
 
-    }catch {
-      case e:DeltaAnalysisException => throw DianeValidationError(s"table:$tableName location:$tablePath is not a delta table")
-      case e:TableAlreadyExistsException => throw DianeValidationError(s"table:$tableName already exits")
+    } catch {
+      case e: DeltaAnalysisException =>
+        throw DianeValidationError(s"table:$tableName location:$tablePath is not a delta table")
+      case e: TableAlreadyExistsException =>
+        throw DianeValidationError(s"table:$tableName already exits")
     }
   }
 
@@ -50,8 +57,8 @@ object HiveHelpers {
 
   sealed abstract class HiveProvider(val label: String)
 
-  object HiveProvider{
-    final case object DELTA extends HiveProvider(label = "delta")
+  object HiveProvider {
+    final case object DELTA   extends HiveProvider(label = "delta")
     final case object PARQUET extends HiveProvider(label = "parquet")
   }
 
@@ -64,4 +71,5 @@ object HiveHelpers {
   }
 }
 
-case class DianeValidationError(smth: String, e:Throwable = new Exception()) extends Exception(smth,e)
+case class DianeValidationError(smth: String, e: Throwable = new Exception())
+    extends Exception(smth, e)
