@@ -1,10 +1,10 @@
 package brayanjuls.diane
 
 import brayanjuls.diane.HiveHelpers.HiveTableType
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.scalatest.{BeforeAndAfterEach, FunSpec}
 
-class HiveHelperSpec extends FunSpec with SparkSessionTestWrapper with BeforeAndAfterEach {
+class HiveHelperSpec extends FunSpec with SparkSessionTestWrapper with BeforeAndAfterEach{
   import spark.implicits._
   override def afterEach(): Unit = {
     val tmpDir = os.pwd / "tmp"
@@ -150,6 +150,41 @@ class HiveHelperSpec extends FunSpec with SparkSessionTestWrapper with BeforeAnd
       }.getMessage
       val expected = s"table:$tableName location:$tableLoc is not a delta table"
       assertResult(expected)(errorMessage)
+    }
+  }
+
+  describe("create or replace view from delta table"){
+    it("should successful create a hive view"){
+
+      val df = List("1", "2", "3").toDF
+      val tmpDir = os.pwd / "tmp"
+      val tableName = "num_table"
+      val tableLoc = (tmpDir / tableName).toString()
+      df.write
+        .format("delta")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable(tableName)
+      val viewName = "view_num_table"
+      HiveHelpers.createOrReplaceHiveView(viewName,tableLoc,0)
+      val result = SparkSession.active.sql(s"select * from $viewName").count()
+      assertResult(3)(result)
+    }
+
+    it("should fail to create a hive view when the table path is not valid"){
+      val df = List("1", "2", "3").toDF
+      val tmpDir = os.pwd / "tmp"
+      val tableName = "num_table"
+      val tableLoc = (tmpDir / tableName).toString()
+      df.write
+        .format("delta")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable(tableName)
+      val viewName = "view_num_table"
+      val errorMessage = intercept[AnalysisException]{
+        HiveHelpers.createOrReplaceHiveView(viewName, "path/to/non_existing_table", 0)
+      }.getMessage()
+
+      assertResult("Unsupported data source type for direct query on files: delta; line 3 pos 23")(errorMessage)
     }
   }
 }
