@@ -9,7 +9,7 @@ libraryDependencies ++= Seq(
   "org.apache.spark" %% "spark-sql"  % sparkVersion % "provided",
   "org.apache.spark" %% "spark-hive" % sparkVersion % "provided",
   "io.delta"         %% "delta-core" % "2.1.0"      % "provided",
-  "org.scalatest"    %% "scalatest"  % "3.0.1"      % "test",
+  "org.scalatest"    %% "scalatest"  % "3.2.15"      % "test",
   "com.lihaoyi"      %% "os-lib"     % "0.7.1"      % "test"
 )
 
