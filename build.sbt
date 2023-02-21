@@ -31,7 +31,7 @@ sonatypeRepository     := "https://s01.oss.sonatype.org/service/local"
 publishTo              := sonatypePublishToBundle.value
 
 import ReleaseTransformations._
-releaseCrossBuild := false
+releaseCrossBuild := true
 releaseProcess := Seq[ReleaseStep](
   checkSnapshotDependencies, // check that there are no SNAPSHOT dependencies
   inquireVersions,           // ask user to enter the current and next version
