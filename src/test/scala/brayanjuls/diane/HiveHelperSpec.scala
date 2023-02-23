@@ -2,9 +2,10 @@ package brayanjuls.diane
 
 import brayanjuls.diane.HiveHelpers.HiveTableType
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
-import org.scalatest.{BeforeAndAfterEach, FunSpec}
+import org.scalatest.funspec.AnyFunSpec
+import org.scalatest.BeforeAndAfterEach
 
-class HiveHelperSpec extends FunSpec with SparkSessionTestWrapper with BeforeAndAfterEach{
+class HiveHelperSpec extends AnyFunSpec with SparkSessionTestWrapper with BeforeAndAfterEach{
   import spark.implicits._
   override def afterEach(): Unit = {
     val tmpDir = os.pwd / "tmp"
