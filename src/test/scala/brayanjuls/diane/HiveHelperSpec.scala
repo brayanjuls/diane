@@ -188,4 +188,51 @@ class HiveHelperSpec extends AnyFunSpec with SparkSessionTestWrapper with Before
       assertResult("Unsupported data source type for direct query on files: delta; line 3 pos 23")(errorMessage)
     }
   }
+
+  describe("Show all objects in the metadata db"){
+
+    it("should return an empty dataframe") {
+      val tableNames = HiveHelpers.allTables().collect().map(t => t.getAs[String]("tableName"))
+      assert(tableNames.isEmpty)
+    }
+
+    it("should return a dataframe of all delta and parquet tables in the metastore"){
+      val tableName = "lang_num_table"
+      val tmpDir = os.pwd / "tmp"
+      val df = List(("1","one"), ("2","two"), ("3","three"),("1","uno")).toDF("num","description")
+      val df2 = List("1","2","3","4").toDF()
+
+      df.write
+        .partitionBy("num")
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable(tableName)
+
+      df.write
+        .partitionBy("num")
+        .format("delta")
+        .mode(SaveMode.Overwrite)
+        .option("path", (tmpDir/"e_new_table").toString())
+        .saveAsTable("e_new_table")
+
+      df2
+        .write
+        .format("delta")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("num_table")
+
+      df.write
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .option("path", (tmpDir / "p_e_new_table").toString())
+        .saveAsTable("p_e_new_table")
+
+      df.createOrReplaceTempView("tmp_num_view")
+      HiveHelpers.createOrReplaceHiveView("pem_num_view",(tmpDir/"num_table").toString,0)
+
+      val tableNames = HiveHelpers.allTables().collect().map(t=>t.getAs[String]("tableName"))
+
+      assertResult(Seq("e_new_table","lang_num_table","num_table","p_e_new_table"))(tableNames)
+    }
+  }
 }
