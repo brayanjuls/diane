@@ -55,6 +55,31 @@ after that you would be able to query, i.e:
 SparkSession.active.sql("select * from students").show
 ```
 
+### Describe all tables registered in Hive DB
+The function `allTables` return a dataframe with  the description of all the tables that are registered in the Hive metastore
+for a specific database. This function is really helpful when we want to explore which table we have registered and their nature. 
+let's see how to use it in an example:
+
+Using an environment with the spark session configured with the connection to your hive metastore,
+execute the following command:
+
+```scala
+HiveHelpers.allTables("your_hive_database_name")
+```
+
+The result of executing the previous command will be a table with the following values:
+```sql
++--------+--------------+--------+------------+----------------+-------------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|database|tableName     |provider|owner       |partitionColumns|bucketColumns|type    |detail                                                                                                                                                                                                                                     |
++--------+--------------+--------+------------+----------------+-------------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|default |e_new_table   |delta   |xxxxxx_xxxxx|[]              |[]           |EXTERNAL|{tableProperties -> [delta.minReaderVersion=1,delta.minWriterVersion=2]}                                                                                                                                                                   |
+|default |lang_num_table|parquet |xxxxxx_xxxxx|[num]           |[]           |MANAGED |{inputFormat -> org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat, outputFormat -> org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat, serdeLibrary -> org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe}|
+|default |num_table     |delta   |xxxxxx_xxxxx|[]              |[]           |MANAGED |{tableProperties -> [delta.minReaderVersion=1,delta.minWriterVersion=2]}                                                                                                                                                                   |
+|default |p_e_new_table |parquet |xxxxxx_xxxxx|[]              |[]           |EXTERNAL|{inputFormat -> org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat, outputFormat -> org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat, serdeLibrary -> org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe}|
++--------+--------------+--------+------------+----------------+-------------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+```
+
+
 ## How to contribute
 We welcome contributions to this project, to contribute checkout our [CONTRIBUTING.md](CONTRIBUTING.md) file.
 

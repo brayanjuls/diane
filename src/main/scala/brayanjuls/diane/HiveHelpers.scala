@@ -2,7 +2,7 @@ package brayanjuls.diane
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.delta.DeltaAnalysisException
-import org.apache.spark.sql.functions.{array, col, element_at, first, lit, map, map_concat, split, struct, typedLit, udf, when}
+import org.apache.spark.sql.functions.{col, element_at, first, lit, map, map_concat, split, struct, typedLit, udf, when}
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, SparkSession, functions}
 
 import scala.Seq
@@ -56,11 +56,14 @@ object HiveHelpers {
     }
   }
 
-  def allTables(): DataFrame = {
+  def allTables(databaseName:String = "default"): DataFrame = {
     val spark = SparkSession.active
     import spark.implicits._
     val catalog   = SparkSession.active.catalog
-    val allTables = catalog.listTables()
+    if(!catalog.listDatabases().collect().map(d=>d.name).contains(databaseName)){
+      throw DianeValidationError(s"Database '$databaseName' not found")
+    }
+    val allTables = catalog.listTables(databaseName)
 
     val tableDetailDF = allTables
       .collect()
@@ -68,7 +71,7 @@ object HiveHelpers {
         t.tableType.equalsIgnoreCase(HiveTableType.EXTERNAL.label))
       .map(t =>
         spark
-          .sql(s"DESCRIBE TABLE EXTENDED ${t.name};")
+          .sql(s"DESCRIBE TABLE EXTENDED ${t.database}.${t.name};")
           .groupBy()
           .pivot("col_name")
           .agg(first("data_type"))
@@ -76,7 +79,7 @@ object HiveHelpers {
             "partitionColumns",
             typedLit(
               spark.catalog
-                .listColumns(t.name)
+                .listColumns(t.database,t.name)
                 .where($"ispartition" === true)
                 .select("name")
                 .collect()
@@ -86,7 +89,7 @@ object HiveHelpers {
           .withColumn("bucketColumns",
             typedLit(
               spark.catalog
-                .listColumns(t.name)
+                .listColumns(t.database,t.name)
                 .where($"isbucket" === true)
                 .select("name")
                 .collect()
@@ -104,47 +107,49 @@ object HiveHelpers {
      * `when` function evaluate to false.
      */
     def setColumns(df: DataFrame) = {
+      val NA_DEFAULT_COL =  lit("N/A")
       df
-        .withColumn("provider", $"Provider")
-        .withColumn("owner", $"Owner")
+        .withColumnRenamed("Provider", "provider")
+        .withColumnRenamed("Owner", "owner")
         .withColumn(
           "tableName",
           when(
-            $"provider" === lit("delta"),
-            if (df.columns.contains("Name")) split($"Name", "\\.").getItem(1) else lit("N/A")
+            $"provider" === lit(HiveProvider.DELTA.label),
+            if (df.columns.contains("Name")) split($"Name", "\\.").getItem(1) else NA_DEFAULT_COL
           )
             .when(
-              $"provider" === lit("parquet"),
-              if (df.columns.contains("Table")) $"Table" else lit("N/A")
+              $"provider" === lit(HiveProvider.PARQUET.label),
+              if (df.columns.contains("Table")) $"Table" else NA_DEFAULT_COL
             )
-            .otherwise(lit("N/A"))
+            .otherwise(NA_DEFAULT_COL)
         )
         .withColumn(
           "database",
           when(
-            $"provider" === lit("delta"),
-            if (df.columns.contains("Name")) split($"Name", "\\.").getItem(0) else lit("N/A")
+            $"provider" === lit(HiveProvider.DELTA.label),
+            if (df.columns.contains("Name")) split($"Name", "\\.").getItem(0) else NA_DEFAULT_COL
           )
             .when(
-              $"provider" === lit("parquet"),
-              if (df.columns.contains("Database")) $"Database" else lit("N/A")
+              $"provider" === lit(HiveProvider.PARQUET.label),
+              if (df.columns.contains("Database")) $"Database" else NA_DEFAULT_COL
             )
-            .otherwise(lit("N/A"))
+            .otherwise(NA_DEFAULT_COL)
         )
         .withColumn(
           "detail",
           when(
-            $"provider" === lit("delta"),
+            $"provider" === lit(HiveProvider.DELTA.label),
             if (df.columns.contains("Table Properties"))
               map(lit("tableProperties"), $"Table Properties")
             else map()
           )
             .when(
-              $"provider" === lit("parquet"),
-              if (df.columns.toSeq.intersect(Seq("InputFormat", "OutputFormat")).size == 2)
+              $"provider" === lit(HiveProvider.PARQUET.label),
+              if (df.columns.toSeq.intersect(Seq("InputFormat", "OutputFormat","Serde Library")).size == 3)
                 map_concat(
                   map(lit("inputFormat"), $"InputFormat"),
-                  map(lit("outputFormat"), $"OutputFormat")
+                  map(lit("outputFormat"), $"OutputFormat"),
+                  map(lit("serdeLibrary"), $"Serde Library")
                 )
               else map()
             )
@@ -156,11 +161,11 @@ object HiveHelpers {
     val emptyDF = Seq.empty[(String,String,String,String,Array[String],Array[String],String,Map[String,String])]
       .toDF(resultColumnNames:_*)
 
-    val singleDFDetail = tableDetailDF
+    val allTablesDF = tableDetailDF
       .map(df => df.transform(setColumns))
       .fold(emptyDF)((df1, df2) => df1.union(df2))
 
-    singleDFDetail
+    allTablesDF
   }
 
   sealed abstract class HiveTableType(val label: String)
