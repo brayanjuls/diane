@@ -57,8 +57,8 @@ SparkSession.active.sql("select * from students").show
 
 ### Describe all tables registered in Hive DB
 The function `allTables` return a dataframe with  the description of all the tables that are registered in the Hive metastore
-for a specific database. This function is really helpful when we want to explore which table we have registered and their nature. 
-let's see how to use it in an example:
+for a specific database. It only support **parquet** and **delta** table for now. This function is really helpful 
+when we want to explore which table we have registered and their nature. let's see how to use it in an example:
 
 Using an environment with the spark session configured with the connection to your hive metastore,
 execute the following command:
