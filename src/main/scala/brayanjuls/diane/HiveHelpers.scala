@@ -2,7 +2,8 @@ package brayanjuls.diane
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.delta.DeltaAnalysisException
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.functions.{col, first, lit, map, map_concat, split, typedLit, when}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 
 object HiveHelpers {
 
@@ -51,6 +52,139 @@ object HiveHelpers {
       case e: TableAlreadyExistsException =>
         throw DianeValidationError(s"table:$tableName already exits")
     }
+  }
+
+  def allTables(databaseName: String = "default"): DataFrame = {
+    val spark = SparkSession.active
+    import spark.implicits._
+    val catalog = SparkSession.active.catalog
+    if (!catalog.listDatabases().collect().map(d => d.name).contains(databaseName)) {
+      throw DianeValidationError(s"Database '$databaseName' not found")
+    }
+    val allTables = catalog.listTables(databaseName)
+
+    val tableDetailDF = allTables
+      .collect()
+      .filter(t =>
+        t.tableType.equalsIgnoreCase(HiveTableType.MANAGED.label) ||
+          t.tableType.equalsIgnoreCase(HiveTableType.EXTERNAL.label)
+      )
+      .map(t =>
+        spark
+          .sql(s"DESCRIBE TABLE EXTENDED ${t.database}.${t.name};")
+          .groupBy()
+          .pivot("col_name")
+          .agg(first("data_type"))
+          .withColumn(
+            "partitionColumns",
+            typedLit(
+              spark.catalog
+                .listColumns(t.database, t.name)
+                .where($"ispartition" === true)
+                .select("name")
+                .collect()
+                .map(_.getAs[String]("name"))
+            )
+          )
+          .withColumn(
+            "bucketColumns",
+            typedLit(
+              spark.catalog
+                .listColumns(t.database, t.name)
+                .where($"isbucket" === true)
+                .select("name")
+                .collect()
+                .map(_.getAs[String]("name"))
+            )
+          )
+          .withColumn("type", lit(t.tableType))
+      )
+
+    val resultColumnNames = Seq(
+      "database",
+      "tableName",
+      "provider",
+      "owner",
+      "partitionColumns",
+      "bucketColumns",
+      "type",
+      "detail"
+    )
+
+    /**
+     * The `if` conditions inside the `when` functions are needed because the sql sentence "describe
+     * table ..." return different columns for each provider, and if you use the name of a column
+     * without the if condition the spark query parser will throw an exception if any of the columns
+     * do not exist in the current dataframe even though the condition in the `when` function
+     * evaluate to false.
+     */
+    def setColumns(df: DataFrame) = {
+      val NA_DEFAULT_COL = lit("N/A")
+      df
+        .withColumnRenamed("Provider", "provider")
+        .withColumnRenamed("Owner", "owner")
+        .withColumn(
+          "tableName",
+          when(
+            $"provider" === lit(HiveProvider.DELTA.label),
+            if (df.columns.contains("Name")) split($"Name", "\\.").getItem(1) else NA_DEFAULT_COL
+          )
+            .when(
+              $"provider" === lit(HiveProvider.PARQUET.label),
+              if (df.columns.contains("Table")) $"Table" else NA_DEFAULT_COL
+            )
+            .otherwise(NA_DEFAULT_COL)
+        )
+        .withColumn(
+          "database",
+          when(
+            $"provider" === lit(HiveProvider.DELTA.label),
+            if (df.columns.contains("Name")) split($"Name", "\\.").getItem(0) else NA_DEFAULT_COL
+          )
+            .when(
+              $"provider" === lit(HiveProvider.PARQUET.label),
+              if (df.columns.contains("Database")) $"Database" else NA_DEFAULT_COL
+            )
+            .otherwise(NA_DEFAULT_COL)
+        )
+        .withColumn(
+          "detail",
+          when(
+            $"provider" === lit(HiveProvider.DELTA.label),
+            if (df.columns.contains("Table Properties"))
+              map(lit("tableProperties"), $"Table Properties")
+            else map()
+          )
+            .when(
+              $"provider" === lit(HiveProvider.PARQUET.label),
+              if (
+                df.columns.toSeq
+                  .intersect(Seq("InputFormat", "OutputFormat", "Serde Library"))
+                  .size == 3
+              )
+                map_concat(
+                  map(lit("inputFormat"), $"InputFormat"),
+                  map(lit("outputFormat"), $"OutputFormat"),
+                  map(lit("serdeLibrary"), $"Serde Library")
+                )
+              else map()
+            )
+            .otherwise(map())
+        )
+        .select(resultColumnNames.map(col): _*)
+    }
+
+    val emptyDF = Seq
+      .empty[
+        (String, String, String, String, Array[String], Array[String], String, Map[String, String])
+      ]
+      .toDF(resultColumnNames: _*)
+
+    val allTablesDF = tableDetailDF
+      .map(df => df.transform(setColumns))
+      .fold(emptyDF)((df1, df2) => df1.union(df2))
+
+    allTablesDF
   }
 
   sealed abstract class HiveTableType(val label: String)
