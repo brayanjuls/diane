@@ -54,7 +54,16 @@ object HiveHelpers {
     }
   }
 
-  def allTables(databaseName: String = "default"): DataFrame = {
+  /***
+   * This function provides metadata about the tables registered in your hive database, the attributes provided
+   * are database, tableName, provider(only delta and parquet are supported for now), owner, partitionColumns,
+   * bucketColumns,type(refers to managed or unmanaged), schema, and
+   * details(here you will find all provider specific attributes).
+   * @param databaseName = Name of the database
+   * @param tables = Name of the tables to be used to generate the
+   * @return DataFrame
+   */
+  def allTables(databaseName: String = "default",tables:Seq[String] = Seq.empty[String]): DataFrame = {
     val spark = SparkSession.active
     import spark.implicits._
     val catalog = SparkSession.active.catalog
@@ -63,7 +72,9 @@ object HiveHelpers {
     }
     val allTables = catalog.listTables(databaseName)
 
-    val tableDetailDF = allTables
+    val selectedTables = allTables.filter(t=>tables.isEmpty || tables.contains(t.name))
+
+    val tableDetailDF = selectedTables
       .collect()
       .filter(t =>
         t.tableType.equalsIgnoreCase(HiveTableType.MANAGED.label) ||
@@ -72,6 +83,9 @@ object HiveHelpers {
       .map(t =>
         spark
           .sql(s"DESCRIBE TABLE EXTENDED ${t.database}.${t.name};")
+          .withColumn("col_name",
+            when(col("col_name") === lit("Name"),lit("column_name"))
+              .otherwise(col("col_name")))
           .groupBy()
           .pivot("col_name")
           .agg(first("data_type"))
@@ -98,6 +112,7 @@ object HiveHelpers {
             )
           )
           .withColumn("type", lit(t.tableType))
+          .withColumn("schema",  lit(spark.table(s"${t.database}.${t.name}").schema.json))
       )
 
     val resultColumnNames = Seq(
@@ -108,6 +123,7 @@ object HiveHelpers {
       "partitionColumns",
       "bucketColumns",
       "type",
+      "schema",
       "detail"
     )
 
@@ -127,7 +143,7 @@ object HiveHelpers {
           "tableName",
           when(
             $"provider" === lit(HiveProvider.DELTA.label),
-            if (df.columns.contains("Name")) split($"Name", "\\.").getItem(1) else NA_DEFAULT_COL
+            if (df.columns.contains("column_name")) split($"column_name", "\\.").getItem(1) else NA_DEFAULT_COL
           )
             .when(
               $"provider" === lit(HiveProvider.PARQUET.label),
@@ -139,7 +155,7 @@ object HiveHelpers {
           "database",
           when(
             $"provider" === lit(HiveProvider.DELTA.label),
-            if (df.columns.contains("Name")) split($"Name", "\\.").getItem(0) else NA_DEFAULT_COL
+            if (df.columns.contains("column_name")) split($"column_name", "\\.").getItem(0) else NA_DEFAULT_COL
           )
             .when(
               $"provider" === lit(HiveProvider.PARQUET.label),
@@ -176,7 +192,7 @@ object HiveHelpers {
 
     val emptyDF = Seq
       .empty[
-        (String, String, String, String, Array[String], Array[String], String, Map[String, String])
+        (String, String, String, String, Array[String], Array[String], String, String, Map[String, String])
       ]
       .toDF(resultColumnNames: _*)
 

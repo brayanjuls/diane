@@ -1,7 +1,6 @@
 package brayanjuls.diane
 
 import brayanjuls.diane.HiveHelpers.HiveTableType
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.BeforeAndAfterEach
@@ -230,12 +229,28 @@ class HiveHelperSpec extends AnyFunSpec with SparkSessionTestWrapper with Before
         .option("path", (tmpDir / "p_e_new_table").toString())
         .saveAsTable("p_e_new_table")
 
+
+          val df_inventory = List(
+            (1, "eggs","eggs",1030,3.4,334,2),
+            (2, "tuna","fish tuna",850,5.0,367,2),
+            (3, "pineapple","fruit",101,2.5,12,2),
+            (4, "potatoes","vegetable",3999,3.4,367,2),
+          ).toDF("id","name","description","quantity","price","vendor_id","category_id")
+
+          df_inventory.write
+            .partitionBy("category_id")
+            .format("delta")
+            .mode(SaveMode.Overwrite)
+            .option("path", (tmpDir / "inventory").toString())
+            .saveAsTable("inventory")
+
+
       df.createOrReplaceTempView("tmp_num_view")
       HiveHelpers.createOrReplaceHiveView("pem_num_view", (tmpDir / "num_table").toString, 0)
 
       val tableNames = HiveHelpers.allTables().collect().map(t => t.getAs[String]("tableName"))
 
-      assertResult(Seq("e_new_table", "lang_num_table", "num_table", "p_e_new_table"))(tableNames)
+      assertResult(Seq("e_new_table", "inventory", "lang_num_table", "num_table", "p_e_new_table"))(tableNames)
     }
 
     it("should return all delta and parquet tables filtered by database") {
@@ -265,6 +280,44 @@ class HiveHelperSpec extends AnyFunSpec with SparkSessionTestWrapper with Before
       }.getMessage
 
       assertResult(s"Database '$databaseName' not found")(messageException)
+    }
+
+    it("should describe only the provided tables"){
+      val tableName = "lang_num_table"
+      val tmpDir = os.pwd / "tmp"
+      val df =
+        List(("1", "one"), ("2", "two"), ("3", "three"), ("1", "uno")).toDF("num", "description")
+      val df2 = List("1", "2", "3", "4").toDF()
+
+      df.write
+        .partitionBy("num")
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable(tableName)
+
+      df.write
+        .partitionBy("num")
+        .format("delta")
+        .mode(SaveMode.Overwrite)
+        .option("path", (tmpDir / "e_new_table").toString())
+        .saveAsTable("e_new_table")
+
+      df2.write
+        .format("delta")
+        .mode(SaveMode.Overwrite)
+        .saveAsTable("num_table")
+
+      df.write
+        .format("parquet")
+        .mode(SaveMode.Overwrite)
+        .option("path", (tmpDir / "p_e_new_table").toString())
+        .saveAsTable("p_e_new_table")
+
+      val tableNames = HiveHelpers
+        .allTables("default",Seq("e_new_table"))
+        .collect().map(t => t.getAs[String]("tableName"))
+
+      assertResult(Seq("e_new_table"))(tableNames)
     }
   }
 }
