@@ -6,9 +6,9 @@ This library provides helpful Hive helper functions for apache spark users.
 
 ## Setup
 ```scala
-libraryDependencies += "com.brayanjules" %% "diane" % "0.0.3"
+libraryDependencies += "com.brayanjules" %% "diane" % "0.0.4"
 ```
-You can find the diane releases for different Scala versions:
+You can find diane releases for different Scala versions:
 
 [Scala version 2.12](https://repo1.maven.org/maven2/com/brayanjules/diane_2.12/)
 
